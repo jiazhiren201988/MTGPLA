@@ -1,0 +1,36 @@
+{
+  "source_run": "DeepTTG_2026-03-23 20:44:04.526124_42",
+  "best_epoch": 95,
+  "seed": 42,
+  "checkpoint_sha256": "40ae4ec449c7aef2689448217b6c0b9e1071142a066dbfeaabda63f796566165",
+  "data": {
+    "train": {
+      "count": 18025,
+      "processed_file_bytes": 447569784,
+      "processed_file_sha256": "0bf2ab6f323d2ae047bd03f283e296562cb8f2e066ecd85a16855eb21bd9266f"
+    },
+    "val": {
+      "count": 1000,
+      "processed_file_bytes": 25135928,
+      "processed_file_sha256": "a9aaf11fa766b7609ef0a3f5728d51d1419878b0d366b26d186372af450c0693"
+    },
+    "test2016": {
+      "count": 285,
+      "processed_file_bytes": 5944376,
+      "processed_file_sha256": "a76db68b56e02fbc65704ee2ded6530a606b4975bbfe79a34ebce13c8c9c7c2d"
+    },
+    "test2013": {
+      "count": 195,
+      "processed_file_bytes": 4130424,
+      "processed_file_sha256": "e3ac75635cac328928b1301b15e055fb9c61de3ae1365610dc324f29e9cd76b7"
+    }
+  },
+  "split_overlap": {
+    "train__val": 0,
+    "train__test2016": 0,
+    "train__test2013": 0,
+    "val__test2016": 0,
+    "val__test2013": 0,
+    "test2016__test2013": 107
+  }
+}

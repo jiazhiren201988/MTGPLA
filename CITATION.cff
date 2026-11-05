@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this implementation, please cite the MTGPLA manuscript."
+type: software
+title: MTGPLA
+repository-code: "https://github.com/jiazhiren201988/MTGPLA"
+authors:
+  - family-names: Ren
+    given-names: Jiazhi
+  - family-names: Lin
+    given-names: Xinyu
+  - family-names: Zhang
+    given-names: Hangchen
+  - family-names: Cao
+    given-names: Chen

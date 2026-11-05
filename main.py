@@ -1,3 +1,5 @@
+import argparse
+from runtime import choose_device
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
@@ -15,12 +17,12 @@ from torch.cuda.amp import GradScaler, autocast
 def train(model, device, train_loader, optimizer,loss_fn):
     print('Training on {} samples...'.format(len(train_loader.dataset)))
     model.train()
-    
+
     for batch_idx, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
 
-        with autocast():
+        with autocast(enabled=device.type == 'cuda'):
             output,_,_ = model(data)
             loss = loss_fn(output, data.y.view(-1, 1).float().to(device))
         # break
@@ -66,65 +68,85 @@ def test(model: nn.Module, test_loader, loss_function, device, show):
 
 
 
-seed = 42
-torch.manual_seed(seed)
-np.random.seed(seed)
-scaler = GradScaler()
-torch.backends.cudnn.enable =True
-torch.backends.cudnn.benchmark = True
+def main():
+    parser = argparse.ArgumentParser(description="Train the released MTGPLA architecture.")
+    parser.add_argument('--data-root', default='data')
+    parser.add_argument('--device', default='auto')
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--batch-size', type=int, default=96)
+    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--save-best-from', type=int, default=60)
+    parser.add_argument('--output-dir', default=None)
+    args = parser.parse_args()
+    if args.epochs < args.save_best_from or args.save_best_from < 1:
+        parser.error('--epochs must be >= --save-best-from >= 1')
+    global scaler
+    seed = args.seed
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    device = choose_device(args.device)
+    scaler = GradScaler(enabled=device.type == 'cuda')
+    torch.backends.cudnn.enable =True
+    torch.backends.cudnn.benchmark = True
 
-model = DeepTTG().to("cuda")
-device = torch.device("cuda")
-loss_fn = nn.MSELoss(reduction='sum')
-optimizer = torch.optim.AdamW(model.parameters(),lr=0.001)
+    model = DeepTTG().to(device)
+    loss_fn = nn.MSELoss(reduction='sum')
+    optimizer = torch.optim.AdamW(model.parameters(),lr=args.lr)
 
-data_loaders = {phase_name:
-                DataLoader(TestbedDataset(root='data', dataset=phase_name),
-                           batch_size=96,
-                           pin_memory=True,
-                           shuffle=True)
-            for phase_name in ['train', 'val', 'test2016','test2013']}
+    data_loaders = {phase_name:
+                    DataLoader(TestbedDataset(root=args.data_root, dataset=phase_name),
+                               batch_size=args.batch_size,
+                               pin_memory=True,
+                               shuffle=True)
+                for phase_name in ['train', 'val', 'test2016','test2013']}
 
-path = Path(f'result/DeepTTG_{datetime.now()}_{seed}')
-writer = SummaryWriter(path)
-NUM_EPOCHS = 100
-save_best_epoch=60
-best_val_loss = 100000000
-best_epoch = -1
+    path = Path(args.output_dir or f'result/MTGPLA_{datetime.now():%Y%m%d_%H%M%S}_{seed}')
+    writer = SummaryWriter(path)
+    NUM_EPOCHS = args.epochs
+    save_best_epoch=args.save_best_from
+    best_val_loss = 100000000
+    best_epoch = -1
 
-start = datetime.now()
-print('start at ', start)
+    start = datetime.now()
+    print('start at ', start)
 
-for epoch in range(1,NUM_EPOCHS+1):
-    print('\n===== round {} ====='.format(epoch))
-    train(model, device, data_loaders['train'], optimizer, loss_fn)
+    for epoch in range(1,NUM_EPOCHS+1):
+        print('\n===== round {} ====='.format(epoch))
+        train(model, device, data_loaders['train'], optimizer, loss_fn)
 
-    # break
-    for _p in [ 'val', 'test2016','test2013']:
-        performance = test(model, data_loaders[_p], loss_fn, device, False)
-        for i in performance:
-            writer.add_scalar(f'{_p} {i}', performance[i], global_step=epoch)
-        if _p == 'val' and epoch >= save_best_epoch and performance['loss'] < best_val_loss:
-            print('the best model found at:',epoch)
-            best_val_loss = performance['loss']
-            best_epoch = epoch
-            torch.save(model.state_dict(), path / 'best_model.pt')
+        # break
+        for _p in [ 'val', 'test2016','test2013']:
+            performance = test(model, data_loaders[_p], loss_fn, device, False)
+            for i in performance:
+                writer.add_scalar(f'{_p} {i}', performance[i], global_step=epoch)
+            if _p == 'val' and epoch >= save_best_epoch and performance['loss'] < best_val_loss:
+                print('the best model found at:',epoch)
+                best_val_loss = performance['loss']
+                best_epoch = epoch
+                torch.save(model.state_dict(), path / 'best_model.pt')
 
-model.load_state_dict(torch.load(path / 'best_model.pt'))
-with open(path / 'result.txt', 'w') as f:
-    f.write(f'best model found at epoch NO.{best_epoch}\n')
-    for _p in ['train', 'val', 'test2016','test2013']:
-        performance = test(model, data_loaders[_p], loss_fn, device, True)
-        f.write(f'{_p}:\n')
-        print(f'{_p}:')
-        for k, v in performance.items():
-            f.write(f'{k}: {v}\n')
-            print(f'{k}: {v}\n')
-        f.write('\n')
-        print()
+    from runtime import load_torch
+    model.load_state_dict(load_torch(path / 'best_model.pt', device))
+    with open(path / 'result.txt', 'w') as f:
+        f.write(f'best model found at epoch NO.{best_epoch}\n')
+        for _p in ['train', 'val', 'test2016','test2013']:
+            performance = test(model, data_loaders[_p], loss_fn, device, True)
+            f.write(f'{_p}:\n')
+            print(f'{_p}:')
+            for k, v in performance.items():
+                f.write(f'{k}: {v}\n')
+                print(f'{k}: {v}\n')
+            f.write('\n')
+            print()
 
-print('train finished')
+    print('train finished')
 
-end = datetime.now()
-print('end at:', end)
-print('time used:', str(end - start))
+    end = datetime.now()
+    print('end at:', end)
+    print('time used:', str(end - start))
+    writer.close()
+
+
+if __name__ == "__main__":
+    main()

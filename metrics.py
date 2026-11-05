@@ -19,7 +19,7 @@ def c_index(y_true, y_pred):
             else:
                 pair -= 1
 
-    if pair is not 0:
+    if pair != 0:
         return summ / pair
     else:
         return 0

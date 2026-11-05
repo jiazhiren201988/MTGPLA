@@ -5,6 +5,7 @@ from scipy import stats
 from torch_geometric.data import InMemoryDataset, DataLoader
 from torch_geometric import data as DATA
 import torch
+from runtime import load_torch
 from tqdm import tqdm
 
 
@@ -19,11 +20,11 @@ class TestbedDataset(InMemoryDataset):
         self.dataset = dataset
         if os.path.isfile(self.processed_paths[0]):
             print('Pre-processed data found: {}, loading ...'.format(self.processed_paths[0]))
-            self.data, self.slices = torch.load(self.processed_paths[0])
+            self.data, self.slices = load_torch(self.processed_paths[0], trusted_objects=True)
         else:
             print('Pre-processed data {} not found, doing pre-processing...'.format(self.processed_paths[0]))
             self.process(pro, poc, smi,y,smile_graph)
-            self.data, self.slices = torch.load(self.processed_paths[0])
+            self.data, self.slices = load_torch(self.processed_paths[0], trusted_objects=True)
 
     @property
     def raw_file_names(self):
@@ -49,7 +50,7 @@ class TestbedDataset(InMemoryDataset):
     def process(self, pro, poc,smi, y,smile_graph):
 
         data_list = []
-        
+
         # for name in smile_graph:
         for name in tqdm(smile_graph, desc="Processing"):
             protein = pro[name]

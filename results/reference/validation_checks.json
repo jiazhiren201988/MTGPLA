@@ -1,0 +1,15 @@
+{
+  "full_test_set_evaluation": {
+    "test2016": 285,
+    "test2013": 195
+  },
+  "strict_checkpoint_loading": "passed",
+  "split_id_counts_and_intersections": "passed",
+  "sequence_encoding_round_trips": "passed",
+  "preprocessing_cli_synthetic_mol2_csv": "passed",
+  "training_cli_one_epoch_four_samples_per_phase": "passed",
+  "full_100_epoch_retraining": "not performed",
+  "original_raw_structure_to_sequence_pipeline": "not recovered",
+  "scatter_plot_cli_full_test_predictions": "passed",
+  "tsne_plot_cli_four_sample_smoke": "passed"
+}
