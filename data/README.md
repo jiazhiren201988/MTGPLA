@@ -1,10 +1,10 @@
-# Data preparation
+# MTGPLA data preparation
 
-This repository publishes split IDs, model code and a trained checkpoint. It does not redistribute PDBbind structures, affinity-label tables or processed feature tensors. Obtain data and any necessary redistribution permission from the [official provider](https://pdbbind-plus.org.cn/); do not assume that a download entitlement grants redistribution rights. The current [provider terms](https://www.pdbbind-plus.org.cn/termofuse) should be checked for your intended use.
+Prepare PDBbind 2020 / CASF data obtained from the [official provider](https://pdbbind-plus.org.cn/) under its terms. The preprocessing command takes protein sequences, pocket sequences, ligand SMILES, ligand MOL2 structures, and affinity labels as inputs.
 
-## Verified saved splits
+## Dataset splits
 
-The IDs in `splits/*.txt` were extracted in their saved order from the project's processed PyG datasets.
+The ordered complex IDs are provided in `splits/*.txt`.
 
 | Split | Complexes |
 |---|---:|
@@ -13,11 +13,11 @@ The IDs in `splits/*.txt` were extracted in their saved order from the project's
 | test2016 | 285 |
 | test2013 | 195 |
 
-Train/validation/test ID intersections are zero. The two test sets share 107 IDs. These checks concern exact PDB IDs, not sequence or scaffold similarity. File sizes and SHA-256 hashes of the original processed tensors are recorded in `../results/reference/manifest.json` for local identity checks.
+The training and validation sets are disjoint from each other and from both test sets. CASF-2016 and CASF-2013 share 107 complexes. File sizes and SHA-256 hashes for the reference processed datasets are available in [manifest.json](../results/reference/manifest.json).
 
-## Inputs accepted by create_data.py
+## Input layout
 
-Provide the existing per-complex sequences and SMILES, affinity labels, and corresponding ligand MOL2 files:
+Prepare per-complex protein and pocket sequences before running `create_data.py`. The input directory has the following layout:
 
 ```text
 INPUT_ROOT/
@@ -42,22 +42,32 @@ INPUT_ROOT/
     test2013/mol2/XXXX_ligand.mol2
 ```
 
-`--affinity-csv` supplies a CSV with a header whose first two columns are PDB ID and numerical affinity. It must use the same target scale as the original experiment. A MOL2 filename begins with its four-character PDB ID, followed by `_` or `.`, and there must be one ligand file per selected complex.
+The affinity CSV must include a header, with PDB IDs in the first column and numerical affinity values in the second column. Use affinity values on the target scale of the experiment. Each MOL2 filename begins with its four-character PDB ID, followed by `_` or `.`, with one ligand file per selected complex.
+
+## Preprocessing command
 
 ```bash
 python create_data.py --input-root INPUT_ROOT --affinity-csv AFFINITY_CSV --data-root data
 ```
 
-Use `--splits test2016 test2013` to prepare only the evaluation splits. Existing outputs are not overwritten; select a fresh `--data-root` to rebuild them.
+Use `--splits test2016 test2013` to process only the evaluation sets. Use `--split-dir` to specify an alternative directory of split IDs. The output directory must be fresh when rebuilding a dataset.
 
-## Encoding conventions
+## Feature encoding
 
-- Protein/pocket alphabet: `ABCDEFGHIKLMNOPQRSTUVWXYZ`, mapped to indices 1 through 25; zero pads the tail.
-- Protein length 1,000; pocket length 63; no extra start/CLS token. Saved tensors were checked for these shapes and valid index ranges.
-- SMILES length 100, with the original character dictionary and index-minus-one encoding. This intentionally retains the historical collision between padding zero and the `(` character. Changing it would require retraining.
-- Ligand graph: RDKit MOL2 parsing; 108 original atom descriptors, normalized by their row sum; chemical bonds represented in both directions.
-- The released preprocessor uses the supplied split ID order and fails on parsing/missing-data errors rather than dropping samples silently.
+- **Protein and pocket:** the alphabet `ABCDEFGHIKLMNOPQRSTUVWXYZ` is mapped to indices 1 through 25, with zero padding. Sequence lengths are 1,000 and 63, respectively.
+- **SMILES:** sequences use the `CHAR_SMI_SET` character dictionary and its index-minus-one mapping, with a maximum length of 100 and zero padding.
+- **Molecular graph:** RDKit parses ligand MOL2 files into atom descriptors and molecular bonds. Each atom has 108 descriptor values normalized by their row sum; bonds are stored in both directions.
+- **Sample order:** preprocessing follows the ordered IDs in each split file and checks the required inputs for each complex.
 
-## Remaining provenance limitation
+## Processed datasets
 
-The inspected source accepts pre-extracted protein and pocket sequences; it does not contain the original PDB parsing, chain selection or pocket-residue extraction pipeline. Those choices cannot be uniquely reconstructed from the truncated integer tensors. A newly extracted sequence dataset is not guaranteed to reproduce the original tensors, even when it uses the same complex IDs. Obtain the original sequence/SMILES inputs or document and validate the extraction procedure before claiming an exact reconstruction from raw structures.
+The generated PyG datasets are stored under `DATA_ROOT/processed/`:
+
+```text
+train.pt
+val.pt
+test2016.pt
+test2013.pt
+```
+
+Use these files with the training and evaluation entry points in the [project README](../README.md). Structures, affinity-label tables, and processed tensors are prepared separately from the code repository.

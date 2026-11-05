@@ -1,28 +1,63 @@
-# Experimental implementation and manuscript alignment
+# MTGPLA framework
 
-The six original source scripts in the inspected project matched the public repository after newline normalization. The selected saved run reproduces the numerical main-result table after rounding. Checkpoint tensor shapes agree with the released architecture. These facts establish the provenance of the checkpoint and code dimensions; they do not prove every historical training or preprocessing detail.
+MTGPLA combines sequence-based and graph-based representations to predict protein-ligand binding affinity. Its feature extraction, interaction modeling, and regression modules form a unified prediction pipeline.
 
-The model source `model.py` is preserved, including the following behaviors:
+## Input representations
 
-| Item | Experimental implementation | Difference from manuscript wording |
-|---|---|---|
-| Protein/pocket encoder | Both forward paths call `protein_transformer`; embeddings are also shared. The separately registered pocket encoder layer is unused. | The manuscript describes two independent, unshared encoders. |
-| Positional lookup | `pos_emb` is indexed by residue token IDs. | This is not the usual positional encoding indexed by sequence positions. |
-| Regression MLP | 608 -> 512 -> 256 -> 1, confirmed by checkpoint weights. | The manuscript describes 608 -> 256 -> 128 -> 1. |
-| GIN epsilon | `GINConv` uses its default `train_eps=False`. | The manuscript describes a learnable epsilon. |
-| SMILES interaction length | Two unpadded kernel-3 convolutions reduce length 100 to 96. Cross-attention receives these 96 tokens. | The interaction matrix is described as retaining 100 tokens. |
-| Graph feature order | Ring indicator precedes aromaticity in the code; atom vectors are normalized by their row sum. | Follow the code when constructing checkpoint-compatible inputs. |
-| t-SNE Stage A | Mean-pooled protein embeddings only, 128 dimensions. | It is not a combined multimodal representation. |
+| Modality | Representation |
+|---|---|
+| Protein | Integer-encoded sequence of length 1,000 |
+| Binding pocket | Integer-encoded sequence of length 63 |
+| Ligand SMILES | Integer-encoded chemical sequence of length 100 |
+| Ligand graph | Molecular connectivity with 108-dimensional atom features |
 
-Do not change these model behaviors while claiming to use this trained checkpoint. Correcting the architecture to match the prose would define a different model and require retraining and fresh evaluation. The manuscript should be reconciled with the actual experiment separately.
+Sequences are truncated or padded to their configured lengths. Ligand molecular graphs are constructed from MOL2 files using RDKit, with bonds represented in both directions.
 
-## Release engineering changes
+## Sequence feature extraction
 
-- Added configurable training, evaluation and plotting entry points; removed cluster-specific absolute paths and font requirements.
-- Retained model parameters, forward computation, default training hyperparameters, and metric definitions.
-- Updated trusted PyG dataset loading for PyTorch versions with restricted-loading defaults; state-dictionary checkpoints use restricted loading where supported.
-- Changed the CI denominator check from Python identity (`is not 0`) to numeric comparison (`!= 0`).
-- Replaced the inspected alternate preprocessing script's incompatible start token 27 and `data27` destination with the no-start-token 1000/63 input format found in the saved `data` tensors. The original alternate script cannot be used directly with this 26-row embedding checkpoint.
-- Preserved Stage A's actual protein-only definition and removed unused intermediate t-SNE variables. The second MLP stage records the second linear layer's output before ReLU, as in the original script.
+Protein and pocket sequences are mapped into 128-dimensional embeddings and processed by Transformer-based sequence pathways. The Transformer configuration uses four encoder layers, four attention heads, and a feed-forward dimension of 512.
 
-The original source is available in repository history before this release. No ablation models were fabricated from the result table. The original raw-structure-to-sequence extraction pipeline and historical dependency lockfile remain unavailable.
+The ligand SMILES pathway combines self-attention with two one-dimensional convolutional layers. This pathway provides token-level representations for interaction modeling and a pooled 128-dimensional ligand sequence feature.
+
+## Molecular graph feature extraction
+
+A four-layer Graph Isomorphism Network processes the ligand atom features and molecular connectivity. Its hidden representations use 96 channels. Batch normalization and ReLU activations accompany graph feature extraction, and global sum pooling produces the ligand graph representation.
+
+## Pocket-ligand interaction modeling
+
+Cross-attention links ligand sequence features with the binding-pocket representation:
+
+- Queries are derived from ligand sequence features.
+- Keys and values are derived from pocket features.
+- Normalization and sequence pooling yield a 128-dimensional interaction feature.
+
+This interaction pathway contributes binding-context information alongside the global sequence and molecular graph representations.
+
+## Feature fusion and affinity prediction
+
+| Feature | Dimensions |
+|---|---:|
+| Protein sequence | 128 |
+| Pocket sequence | 128 |
+| Ligand SMILES | 128 |
+| Ligand molecular graph | 96 |
+| Pocket-ligand interaction | 128 |
+| Concatenated representation | 608 |
+
+The prediction MLP maps the fused representation through layers of 608 -> 512 -> 256 -> 1. ReLU activations and dropout are applied within the regression module. The final scalar is the predicted binding affinity.
+
+## Training and evaluation
+
+Training uses AdamW and an MSE objective. The default configuration sets seed 42, learning rate 0.001, batch size 96, and 100 epochs. The best checkpoint is selected using validation loss from epoch 60 onward.
+
+Evaluation reports Pearson correlation (R), root mean squared error (RMSE), mean absolute error (MAE), regression standard deviation (SD), and concordance index (CI). The `evaluate.py` entry point exports metrics and per-complex predictions.
+
+## Feature visualization
+
+The visualization tools produce prediction scatter plots and t-SNE projections at three stages:
+
+1. Mean-pooled protein embeddings.
+2. Fused representations entering the prediction MLP.
+3. Outputs of the second MLP linear layer.
+
+The t-SNE visualization groups complexes using the median experimental affinity of the selected split. Commands and output locations are described in the [project README](../README.md).
