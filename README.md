@@ -114,6 +114,3 @@ The t-SNE tool visualizes protein embeddings, fused features before the predicti
 | `results/reference/` | Reference metrics, hashes, and evaluation records |
 | `docs/IMPLEMENTATION_NOTES.md` | Framework details |
 
-## Citation
-
-If you use MTGPLA in your research, please cite the MTGPLA manuscript. Author information is provided in [CITATION.cff](CITATION.cff).
